@@ -1,6 +1,6 @@
 # 🔍 Predição de Status de Crimes
 
-Aplicação Streamlit para prever a probabilidade de um crime ser **Concluído** ou **Arquivado** usando modelo de regressão logística.
+Aplicação Streamlit para prever a probabilidade de um crime ser **Concluído** ou **Arquivado** usando modelo de classificação logística.
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://regressao-geraldo.streamlit.app)
 

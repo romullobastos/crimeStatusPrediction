@@ -23,7 +23,7 @@ st.set_page_config(
 
 # Título principal
 st.title("🔍 Predição de Status de Crimes com Análise de Clusters")
-st.markdown("**Modelo Integrado: Classificação Logística + Clustering para prever probabilidade de conclusão/arquivamento**")
+st.markdown("**Modelo Integrado: Regressão Logística + Clustering para prever probabilidade de conclusão/arquivamento**")
 st.markdown("*Features Alinhadas: Tipo de Crime, Modus Operandi, Arma, Quantidade de Vítimas/Suspeitos (Ambos os modelos)*")
 
 # Carregar dados
@@ -38,7 +38,7 @@ def load_data():
 
 df = load_data()
 
-# Preparar dados para o modelo (CLASSIFICAÇÃO)
+# Preparar dados para o modelo (REGRESSÃO LOGÍSTICA)
 def prepare_data(df):
     # Selecionar features categóricas e numéricas (alinhadas com clustering)
     categorical_features = ['tipo_crime', 'descricao_modus_operandi', 'arma_utilizada']
@@ -114,9 +114,9 @@ df_with_clusters, kmeans_model, scaler_cluster, le_cluster, cluster_columns = cr
 # Treinar modelo
 st.header("🤖 Modelo de Predição")
 
-model_choice = st.selectbox("Escolha o modelo:", ["Classificação Logística", "Random Forest"])
+model_choice = st.selectbox("Escolha o modelo:", ["Regressão Logística", "Random Forest"])
 
-if model_choice == "Classificação Logística":
+if model_choice == "Regressão Logística":
     model = LogisticRegression(random_state=42, max_iter=1000)
     model.fit(X_train_scaled, y_train)
     y_pred = model.predict(X_test_scaled)
@@ -168,7 +168,7 @@ if st.button("🔮 Prever Status e Cluster", type="primary"):
     X_input = input_df[feature_columns]
     
     # Fazer predição de status
-    if model_choice == "Classificação Logística":
+    if model_choice == "Regressão Logística":
         X_input_scaled = scaler.transform(X_input)
         proba = model.predict_proba(X_input_scaled)[0]
     else:

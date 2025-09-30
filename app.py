@@ -320,7 +320,7 @@ if model_choice == "Random Forest":
     st.plotly_chart(fig_importance, use_container_width=True)
 
 # Análise de clusters
-st.header("🔍 Análise de Clusters (Sem Bairro)")
+st.header("🔍 Análise de Clusters")
 
 # Estatísticas dos clusters
 cluster_stats = df_with_clusters.groupby('cluster').agg({

@@ -26,6 +26,10 @@ st.title("🔍 Predição de Status de Crimes com Análise de Clusters")
 st.markdown("**Modelo Integrado: Regressão Logística + Clustering para prever probabilidade de conclusão/arquivamento**")
 st.markdown("*Features Alinhadas: Tipo de Crime, Modus Operandi, Arma, Quantidade de Vítimas/Suspeitos (Ambos os modelos)*")
 
+# Organização visual
+st.markdown("---")
+st.header("🧠 Análise Supervisionada (Modelo)")
+
 # Carregar dados
 @st.cache_data
 def load_data():
@@ -261,6 +265,10 @@ st.sidebar.metric("Total de Ocorrências", len(df_filtered))
 st.sidebar.metric("Concluídos", len(df_filtered[df_filtered['status_binario'] == 1]))
 st.sidebar.metric("Arquivados", len(df_filtered[df_filtered['status_binario'] == 0]))
 
+# Guia rápido (glossário) para usuários não técnicos
+with st.sidebar.expander("Guia rápido (o que é cada coisa?)", expanded=False):
+    st.markdown("- **Cluster**: grupo de casos parecidos.\n- **Probabilidade**: quão provável um caso ser concluído.\n- **Acurácia**: o quanto o modelo acerta.\n- **Taxa de conclusão**: % de casos concluídos.")
+
 # Análise exploratória
 st.header("📈 Análise Exploratória dos Dados")
 
@@ -274,7 +282,7 @@ with col1:
     st.plotly_chart(fig_pie, use_container_width=True)
 
 with col2:
-    # Status por tipo de crime
+    # Status por tipo de crime (visão geral do conjunto rotulado)
     status_crime = pd.crosstab(df_filtered['tipo_crime'], df_filtered['status_investigacao'])
     fig_bar = px.bar(status_crime, title="Status por Tipo de Crime", 
                      labels={'value': 'Quantidade', 'index': 'Tipo de Crime'})
@@ -320,48 +328,124 @@ if model_choice == "Random Forest":
     st.plotly_chart(fig_importance, use_container_width=True)
 
 # Análise de clusters
-st.header("🔍 Análise de Clusters")
+st.markdown("")
 
-# Estatísticas dos clusters
-cluster_stats = df_with_clusters.groupby('cluster').agg({
-    'status_binario': ['count', 'sum', 'mean'],
-    'tipo_crime': lambda x: x.mode()[0],
-    'quantidade_vitimas': 'mean',
-    'quantidade_suspeitos': 'mean'
-}).round(3)
-
-cluster_stats.columns = ['Total_Casos', 'Concluidos', 'Taxa_Conclusao', 'Tipo_Dominante', 'Vítimas_Médias', 'Suspeitos_Médios']
-cluster_stats = cluster_stats.reset_index()
-
-# Gráfico de taxa de conclusão por cluster
-fig_cluster = px.bar(cluster_stats, x='cluster', y='Taxa_Conclusao',
-                     title="Taxa de Conclusão por Cluster (Sem Bairro)",
-                     labels={'Taxa_Conclusao': 'Taxa de Conclusão', 'cluster': 'Cluster'})
-fig_cluster.update_layout(xaxis_tickangle=0)
-st.plotly_chart(fig_cluster, use_container_width=True)
-
-# Tabela com estatísticas dos clusters
-st.subheader("📊 Estatísticas dos Clusters")
-st.dataframe(cluster_stats.sort_values('Taxa_Conclusao', ascending=False))
-
-# Análise por tipo de crime
-st.header("🔍 Análise por Tipo de Crime")
-
-crime_analysis = df_filtered.groupby('tipo_crime')['status_binario'].agg(['count', 'sum', 'mean']).reset_index()
-crime_analysis.columns = ['Tipo_Crime', 'Total_Casos', 'Concluidos', 'Taxa_Conclusao']
-crime_analysis['Taxa_Conclusao'] = crime_analysis['Taxa_Conclusao'].round(3)
-
-# Gráfico de taxa de conclusão por tipo de crime
-fig_crime = px.bar(crime_analysis, x='Tipo_Crime', y='Taxa_Conclusao',
-                   title="Taxa de Conclusão por Tipo de Crime",
-                   labels={'Taxa_Conclusao': 'Taxa de Conclusão'})
-fig_crime.update_layout(xaxis_tickangle=45)
-st.plotly_chart(fig_crime, use_container_width=True)
-
-# Tabela com estatísticas por tipo de crime
-st.subheader("📊 Estatísticas por Tipo de Crime")
-st.dataframe(crime_analysis.sort_values('Taxa_Conclusao', ascending=False))
-
-# Footer
+# =====================
+# Relação Não Supervisionado × Supervisionado
+# =====================
 st.markdown("---")
-st.markdown("**Desenvolvido com Streamlit** | Modelo de Regressão Logística para Predição de Status de Crimes")
+st.header("🧩 Análise Não Supervisionada (Clusters)")
+st.subheader("🔗 Relação entre Clusters (K-Means) e Predições do Modelo")
+
+# Recriar features codificadas para TODO o conjunto filtrado usando os mesmos encoders
+categorical_features_all = ['tipo_crime', 'descricao_modus_operandi', 'arma_utilizada']
+feature_columns_all = [f + '_encoded' for f in categorical_features_all] + ['quantidade_vitimas', 'quantidade_suspeitos']
+
+df_encoded_all = df_filtered.copy()
+for feature in categorical_features_all:
+    df_encoded_all[feature + '_encoded'] = le_dict[feature].transform(df_encoded_all[feature].astype(str))
+
+X_all = df_encoded_all[feature_columns_all]
+
+# Probabilidades preditas para TODO o conjunto (coerente com o modelo escolhido)
+if model_choice == "Regressão Logística":
+    X_all_scaled = scaler.transform(X_all)
+    proba_all = model.predict_proba(X_all_scaled)[:, 1]
+else:
+    proba_all = model.predict_proba(X_all)[:, 1]
+
+pred_label_all = (proba_all >= 0.5).astype(int)
+
+# Anexar probabilidades e rótulos ao dataframe com clusters
+df_rel = df_with_clusters.copy()
+df_rel = df_rel.reset_index(drop=True)
+
+# Garantir alinhamento por índice com df_filtered
+df_rel['proba_concluido'] = pd.Series(proba_all).values
+df_rel['predito_binario'] = pd.Series(pred_label_all).values
+df_rel['status_predito'] = np.where(df_rel['predito_binario'] == 1, 'Concluído', 'Arquivado')
+
+st.subheader("Distribuição de Probabilidades por Cluster")
+fig_box = px.box(
+    df_rel,
+    x='cluster', y='proba_concluido', color='cluster',
+    labels={'cluster': 'Cluster', 'proba_concluido': 'Probabilidade de Conclusão (Predita)'},
+    title='Probabilidades de Conclusão por Cluster (Supervisionado vs Clusters)'
+)
+fig_box.update_layout(showlegend=False)
+st.plotly_chart(fig_box, use_container_width=True)
+
+# Métricas por cluster: tamanho, taxa real, taxa predita média e acurácia por cluster
+st.subheader("Métricas por Cluster")
+cluster_metrics = df_rel.groupby('cluster').apply(
+    lambda g: pd.Series({
+        'Total_Casos': int(len(g)),
+        'Taxa_Conclusao_Real': float(g['status_binario'].mean()),
+        'Prob_Predita_Media': float(g['proba_concluido'].mean()),
+        'Acuracia_Predito': float((g['predito_binario'] == g['status_binario']).mean())
+    })
+).reset_index()
+
+cluster_metrics['Taxa_Conclusao_Real'] = cluster_metrics['Taxa_Conclusao_Real'].round(3)
+cluster_metrics['Prob_Predita_Media'] = cluster_metrics['Prob_Predita_Media'].round(3)
+cluster_metrics['Acuracia_Predito'] = cluster_metrics['Acuracia_Predito'].round(3)
+
+st.dataframe(cluster_metrics.sort_values('Acuracia_Predito', ascending=False))
+
+col_a, col_b = st.columns(2)
+with col_a:
+    fig_acc = px.bar(
+        cluster_metrics,
+        x='cluster', y='Acuracia_Predito',
+        title='Acurácia por Cluster',
+        labels={'Acuracia_Predito': 'Acurácia'}
+    )
+    fig_acc.update_layout(yaxis_tickformat='.0%')
+    st.plotly_chart(fig_acc, use_container_width=True)
+
+with col_b:
+    fig_cal = px.bar(
+        cluster_metrics,
+        x='cluster', y='Prob_Predita_Media',
+        title='Probabilidade Predita Média por Cluster',
+        labels={'Prob_Predita_Media': 'Probabilidade Média'}
+    )
+    fig_cal.update_layout(yaxis_tickformat='.0%')
+    st.plotly_chart(fig_cal, use_container_width=True)
+
+# =====================
+# Modo Simplificado: Insights em linguagem natural
+# (posicionado aqui para garantir que cluster_metrics já existe)
+# =====================
+st.header("💡 Insights em linguagem simples")
+
+# 1) Em que grupos os casos tendem a ser concluídos?
+top_clusters = cluster_metrics.sort_values('Taxa_Conclusao_Real', ascending=False).head(3)
+def to_ratio(p):
+    # Converte percentual (0-1) em expressão tipo "7 em cada 10"
+    if pd.isna(p):
+        return "—"
+    denom = 10
+    num = int(round(p * denom))
+    num = max(0, min(num, denom))
+    return f"{num} em cada {denom}"
+
+txt_top = ", ".join([
+    f"Cluster {int(r['cluster'])} ({to_ratio(r['Taxa_Conclusao_Real'])} casos concluídos)"
+    for _, r in top_clusters.iterrows()
+]) if len(top_clusters) else "—"
+st.markdown(f"- **Onde mais conclui:** {txt_top}")
+
+# 2) Onde o modelo mais acerta?
+top_acc = cluster_metrics.sort_values('Acuracia_Predito', ascending=False).head(3)
+txt_acc = ", ".join([
+    f"Cluster {int(r['cluster'])} ({to_ratio(r['Acuracia_Predito'])} acertos)"
+    for _, r in top_acc.iterrows()
+]) if len(top_acc) else "—"
+st.markdown(f"- **Onde o modelo mais acerta:** {txt_acc}")
+
+# 3) Como interpretar uma probabilidade?
+st.markdown("- **Como ler a probabilidade:** acima de 70% ≈ 7 em 10 chances; abaixo de 30% ≈ 3 em 10; no meio, incerteza.")
+
+# 4) Explicação curta de uso
+st.markdown("- **Como usar:** selecione as características do caso e veja a probabilidade e o grupo parecido. Compare com as métricas por cluster acima para entender o contexto.")

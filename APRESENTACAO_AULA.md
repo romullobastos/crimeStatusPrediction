@@ -17,8 +17,8 @@
 
 ### **Dados Analisados:**
 - **5.000 ocorrências** policiais
-- **Período:** 2022-2025
-- **Status:** Concluído (33.1%) vs Arquivado (32.8%) vs Em Investigação (34.1%)
+- **Após filtro (sem "Em Investigação"):** 3.296 casos
+- **Status:** Concluído (50.2%) vs Arquivado (49.8%)
 
 ### **Features Selecionadas (5 características):**
 1. **Tipo de Crime** (10 tipos)
@@ -75,11 +75,13 @@
 1. **Ameaça:** 52.5% (178/339)
 2. **Furto:** 52.0% (169/325)
 3. **Homicídio:** 51.5% (168/326)
+4. **Sequestro:** 51.1% (161/315)
 
 ### **Crimes com Menor Taxa de Conclusão:**
 1. **Estupro:** 48.0% (157/327)
 2. **Estelionato:** 48.5% (159/328)
 3. **Tráfico de Drogas:** 49.0% (169/345)
+4. **Roubo:** 49.7% (160/322)
 
 ### **Insights:**
 - Crimes mais graves (Homicídio) têm boa taxa de conclusão
@@ -112,16 +114,14 @@
 ## 📊 **Slide 7: Performance do Sistema**
 
 ### **Métricas de Regressão Logística:**
-- **Acurácia:** 50.8%
-- **Precisão (Arquivado):** 50.6%
-- **Precisão (Concluído):** 50.9%
-- **Recall (Arquivado):** 47.4%
-- **Recall (Concluído):** 54.1%
+- **Acurácia:** ~51% (modelo balanceado)
+- **Distribuição dos Dados:** 50.2% Concluído vs 49.8% Arquivado
+- **Performance:** Modelo equilibrado para ambas as classes
 
 ### **Métricas de Clustering:**
-- **Inércia:** 9,400.76
-- **Iterações:** 48
-- **Distribuição:** Balanceada entre clusters
+- **6 Clusters:** Distribuição balanceada (529-598 casos por cluster)
+- **Taxa de Conclusão por Cluster:** 45.7% - 53.8%
+- **Características Distintas:** Cada cluster tem tipo de crime dominante
 
 ### **Observação:**
 - Modelo balanceado (não há viés para uma classe)
@@ -157,21 +157,25 @@
 
 ### **Padrões Identificados:**
 
-1. **Correlação Vítimas vs Suspeitos:** -0.007 (praticamente nula)
-2. **Distribuição de Armas:**
+1. **Distribuição de Armas:**
    - Explosivos: 21.0%
    - Nenhum: 20.5%
    - Objeto Contundente: 20.1%
+   - Arma de Fogo: 19.5%
+   - Faca: 18.9%
 
-3. **Modus Operandi Mais Comum:**
+2. **Modus Operandi Mais Comum:**
    - Fraude Online: 11.1%
    - Estupro Coletivo: 10.3%
    - Invasão Residencial: 10.3%
+   - Assalto a Mão Armada: 10.0%
+   - Uso de Arma de Fogo: 10.0%
 
 ### **Fatores Influenciadores:**
-- Tipo de crime é o principal determinante
-- Modus operandi influencia complexidade
-- Quantidade de vítimas/suspeitos tem baixa correlação
+- **Tipo de crime** é o principal determinante da taxa de conclusão
+- **Modus operandi** influencia a complexidade da investigação
+- **Distribuição equilibrada** entre armas utilizadas
+- **Crimes digitais** (Fraude Online) são os mais comuns
 
 ---
 

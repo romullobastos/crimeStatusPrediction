@@ -1,16 +1,17 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 import plotly.express as px
-import plotly.graph_objects as go
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, precision_score
 from sklearn.cluster import KMeans
+from sklearn.ensemble import IsolationForest
+from sklearn.neighbors import LocalOutlierFactor
+import folium
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -31,7 +32,6 @@ st.markdown("---")
 st.header("🧠 Análise Supervisionada (Modelo)")
 
 # Carregar dados
-@st.cache_data
 def load_data():
     df = pd.read_csv('dataset_ocorrencias_delegacia_5.csv')
     
@@ -40,7 +40,9 @@ def load_data():
     
     return df
 
+# Carregar dataset padrão
 df = load_data()
+st.sidebar.info("📁 Usando dataset padrão")
 
 # Preparar dados para o modelo (REGRESSÃO LOGÍSTICA)
 def prepare_data(df):
@@ -65,8 +67,13 @@ def prepare_data(df):
     return X, y, le_dict, feature_columns
 
 # Filtrar dados (excluir "Em Investigação")
-df_filtered = df[df['status_investigacao'] != 'Em Investigação'].copy()
-df_filtered['status_binario'] = (df_filtered['status_investigacao'] == 'Concluído').astype(int)
+df_filtered = df[~df['status_investigacao'].str.contains('Em Investiga', na=False)].copy()
+df_filtered['status_binario'] = (df_filtered['status_investigacao'].str.contains('Conclu', na=False)).astype(int)
+
+# Mostrar informações sobre o dataset
+st.sidebar.info(f"📊 Dataset: {len(df)} registros")
+st.sidebar.info(f"📋 Colunas: {len(df.columns)}")
+
 
 # Preparar dados
 X, y, le_dict, feature_columns = prepare_data(df_filtered)
@@ -79,41 +86,70 @@ scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
-# Criar modelo de clustering (MESMAS FEATURES DA REGRESSÃO)
+# Criar modelo de clustering
 def create_clustering_model(df):
-    """Cria modelo de clustering com as MESMAS features da regressão"""
-    # Selecionar features para clustering (EXATAMENTE as mesmas da regressão)
-    categorical_features_cluster = ['tipo_crime', 'descricao_modus_operandi', 'arma_utilizada']
-    numerical_features_cluster = ['quantidade_vitimas', 'quantidade_suspeitos']
+    """Cria modelo de clustering com as mesmas features da regressão"""
+    categorical_features = ['tipo_crime', 'descricao_modus_operandi', 'arma_utilizada']
+    numerical_features = ['quantidade_vitimas', 'quantidade_suspeitos']
     
-    # Codificar variáveis categóricas para clustering
     df_cluster = df.copy()
     le_cluster = {}
     
-    for feature in categorical_features_cluster:
+    for feature in categorical_features:
         le = LabelEncoder()
         df_cluster[feature + '_encoded'] = le.fit_transform(df_cluster[feature].astype(str))
         le_cluster[feature] = le
     
-    # Preparar dados para clustering (MESMAS features da regressão)
-    cluster_columns = [f + '_encoded' for f in categorical_features_cluster] + numerical_features_cluster
+    cluster_columns = [f + '_encoded' for f in categorical_features] + numerical_features
     X_cluster = df_cluster[cluster_columns]
     
-    # Normalizar dados para clustering
     scaler_cluster = StandardScaler()
     X_cluster_scaled = scaler_cluster.fit_transform(X_cluster)
     
-    # Aplicar K-Means (usando 6 clusters como no modelo original)
     kmeans = KMeans(n_clusters=6, random_state=42, n_init=10)
     clusters = kmeans.fit_predict(X_cluster_scaled)
     
-    # Adicionar clusters ao dataframe
     df_cluster['cluster'] = clusters
     
     return df_cluster, kmeans, scaler_cluster, le_cluster, cluster_columns
 
+# Função para detecção de anomalias
+def detect_anomalies(df):
+    """Detecta anomalias usando Isolation Forest e LOF"""
+    categorical_features = ['tipo_crime', 'descricao_modus_operandi', 'arma_utilizada']
+    numerical_features = ['quantidade_vitimas', 'quantidade_suspeitos']
+    
+    df_anomaly = df.copy()
+    le_anomaly = {}
+    
+    for feature in categorical_features:
+        le = LabelEncoder()
+        df_anomaly[feature + '_encoded'] = le.fit_transform(df_anomaly[feature].astype(str))
+        le_anomaly[feature] = le
+    
+    anomaly_columns = [f + '_encoded' for f in categorical_features] + numerical_features
+    X_anomaly = df_anomaly[anomaly_columns]
+    
+    scaler_anomaly = StandardScaler()
+    X_anomaly_scaled = scaler_anomaly.fit_transform(X_anomaly)
+    
+    iso_forest = IsolationForest(contamination=0.1, random_state=42)
+    iso_anomalies = iso_forest.fit_predict(X_anomaly_scaled)
+    
+    lof = LocalOutlierFactor(n_neighbors=20, contamination=0.1)
+    lof_anomalies = lof.fit_predict(X_anomaly_scaled)
+    
+    df_anomaly['iso_anomaly'] = iso_anomalies
+    df_anomaly['lof_anomaly'] = lof_anomalies
+    df_anomaly['is_anomaly'] = ((iso_anomalies == -1) | (lof_anomalies == -1)).astype(int)
+    
+    return df_anomaly, iso_forest, lof, scaler_anomaly, le_anomaly, anomaly_columns
+
 # Criar modelo de clustering
 df_with_clusters, kmeans_model, scaler_cluster, le_cluster, cluster_columns = create_clustering_model(df_filtered)
+
+# Detectar anomalias
+df_with_anomalies, iso_model, lof_model, scaler_anomaly, le_anomaly, anomaly_columns = detect_anomalies(df_filtered)
 
 # Treinar modelo
 st.header("🤖 Modelo de Predição")
@@ -297,7 +333,9 @@ col1, col2, col3 = st.columns(3)
 with col1:
     st.metric("Acurácia", f"{accuracy:.3f}")
 with col2:
-    st.metric("Precisão", f"{accuracy_score(y_test, y_pred):.3f}")
+    # Calcular precisão média
+    precision = precision_score(y_test, y_pred, average='weighted')
+    st.metric("Precisão", f"{precision:.3f}")
 with col3:
     st.metric("Amostras de Teste", len(y_test))
 
@@ -330,22 +368,12 @@ if model_choice == "Random Forest":
 # Análise de clusters
 st.markdown("")
 
-# =====================
-# Relação Não Supervisionado × Supervisionado
-# =====================
 st.markdown("---")
 st.header("🧩 Análise Não Supervisionada (Clusters)")
 st.subheader("🔗 Relação entre Clusters (K-Means) e Predições do Modelo")
 
-# Recriar features codificadas para TODO o conjunto filtrado usando os mesmos encoders
-categorical_features_all = ['tipo_crime', 'descricao_modus_operandi', 'arma_utilizada']
-feature_columns_all = [f + '_encoded' for f in categorical_features_all] + ['quantidade_vitimas', 'quantidade_suspeitos']
-
-df_encoded_all = df_filtered.copy()
-for feature in categorical_features_all:
-    df_encoded_all[feature + '_encoded'] = le_dict[feature].transform(df_encoded_all[feature].astype(str))
-
-X_all = df_encoded_all[feature_columns_all]
+# Usar features já codificadas do modelo de clustering
+X_all = df_with_clusters[cluster_columns]
 
 # Probabilidades preditas para TODO o conjunto (coerente com o modelo escolhido)
 if model_choice == "Regressão Logística":
@@ -413,10 +441,7 @@ with col_b:
     fig_cal.update_layout(yaxis_tickformat='.0%')
     st.plotly_chart(fig_cal, use_container_width=True)
 
-# =====================
-# Modo Simplificado: Insights em linguagem natural
-# (posicionado aqui para garantir que cluster_metrics já existe)
-# =====================
+# Insights em linguagem natural
 st.header("💡 Insights em linguagem simples")
 
 # 1) Em que grupos os casos tendem a ser concluídos?
@@ -449,3 +474,174 @@ st.markdown("- **Como ler a probabilidade:** acima de 70% ≈ 7 em 10 chances; a
 
 # 4) Explicação curta de uso
 st.markdown("- **Como usar:** selecione as características do caso e veja a probabilidade e o grupo parecido. Compare com as métricas por cluster acima para entender o contexto.")
+
+# Mapa de Hotspots
+st.markdown("---")
+st.header("🗺️ Mapa de Hotspots")
+
+# Função para criar mapa de hotspots
+def create_hotspot_map(df):
+    """Cria mapa de hotspots usando Folium"""
+    # Coordenadas reais de Recife
+    center_lat, center_lon = -8.0476, -34.8770  # Recife como referência
+    
+    # Criar mapa base
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=11)
+    
+    # Usar coordenadas reais dos bairros de Recife
+    bairro_coords = {}
+    
+    # Coordenadas reais dos bairros de Recife (baseado nos bairros do dataset)
+    recife_bairros = {
+        'Imbiribeira': [-8.1114, -34.9435],  # Zona Sul
+        'Boa Viagem': [-8.1000, -34.8833],   # Zona Sul, próximo à praia
+        'Santo Amaro': [-8.0969, -34.8984], # Zona Sul
+        'Afogados': [-8.1351, -34.9135],    # Zona Sul
+        'Tamarineira': [-8.0333, -34.8833], # Zona Norte
+        'Torre': [-8.0500, -34.9000],       # Centro
+        'Casa Forte': [-8.0331, -34.9181],  # Zona Norte
+        'Graças': [-8.0500, -34.9000],      # Centro
+        'Espinheiro': [-8.0500, -34.8833],  # Centro
+        'Pina': [-8.1000, -34.8833]        # Zona Sul
+    }
+    
+    # Mapear cada bairro do dataset para suas coordenadas reais
+    for bairro in df['bairro'].unique():
+        if bairro in recife_bairros:
+            bairro_coords[bairro] = recife_bairros[bairro]
+        else:
+            # Para bairros não mapeados, usar coordenadas próximas ao centro de Recife
+            lat_offset = np.random.uniform(-0.03, 0.03)
+            lon_offset = np.random.uniform(-0.03, 0.03)
+            bairro_coords[bairro] = [center_lat + lat_offset, center_lon + lon_offset]
+    
+    # Adicionar marcadores para cada bairro
+    for bairro in df['bairro'].unique():
+        bairro_data = df[df['bairro'] == bairro]
+        total_crimes = len(bairro_data)
+        concluded_crimes = len(bairro_data[bairro_data['status_investigacao'] == 'Concluído'])
+        completion_rate = (concluded_crimes / total_crimes) * 100 if total_crimes > 0 else 0
+        
+        # Cor baseada na taxa de conclusão
+        if completion_rate > 60:
+            color = 'green'
+        elif completion_rate > 40:
+            color = 'orange'
+        else:
+            color = 'red'
+        
+        # Adicionar marcador
+        folium.CircleMarker(
+            location=bairro_coords[bairro],
+            radius=min(max(total_crimes / 10, 5), 20),  # Tamanho baseado no número de crimes
+            popup=f"""
+            <b>{bairro}</b><br>
+            Total de Crimes: {total_crimes}<br>
+            Taxa de Conclusão: {completion_rate:.1f}%<br>
+            Crimes Concluídos: {concluded_crimes}
+            """,
+            color='black',
+            weight=1,
+            fillColor=color,
+            fillOpacity=0.7
+        ).add_to(m)
+    
+    return m
+
+# Criar e exibir mapa
+if 'bairro' in df.columns:
+    hotspot_map = create_hotspot_map(df_filtered)
+    
+    # Salvar mapa temporariamente e exibir
+    map_html = hotspot_map._repr_html_()
+    components.html(map_html, height=500)
+    
+    # Estatísticas do mapa
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Total de Bairros", df_filtered['bairro'].nunique())
+    
+    with col2:
+        high_completion = df_filtered.groupby('bairro').apply(
+            lambda x: (x['status_investigacao'] == 'Concluído').mean() > 0.6
+        ).sum()
+        st.metric("Bairros com Alta Taxa de Conclusão", high_completion)
+    
+    with col3:
+        total_crimes = len(df_filtered)
+        st.metric("Total de Crimes no Mapa", total_crimes)
+else:
+    st.warning("⚠️ Coluna 'bairro' não encontrada no dataset. Mapa de hotspots não pode ser gerado.")
+
+# Tela de Anomalias
+st.markdown("---")
+st.header("🚨 Detecção de Anomalias")
+
+# Estatísticas de anomalias
+anomaly_stats = df_with_anomalies['is_anomaly'].value_counts()
+total_anomalies = anomaly_stats.get(1, 0)
+total_normal = anomaly_stats.get(0, 0)
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("Total de Anomalias", total_anomalies)
+with col2:
+    st.metric("Casos Normais", total_normal)
+with col3:
+    anomaly_rate = (total_anomalies / len(df_with_anomalies)) * 100
+    st.metric("Taxa de Anomalias", f"{anomaly_rate:.1f}%")
+
+# Filtros para anomalias
+st.subheader("🔍 Filtros de Anomalias")
+
+col1, col2 = st.columns(2)
+with col1:
+    show_iso_anomalies = st.checkbox("Mostrar apenas anomalias do Isolation Forest", value=True)
+with col2:
+    show_lof_anomalies = st.checkbox("Mostrar apenas anomalias do LOF", value=True)
+
+# Filtrar anomalias
+anomaly_filter = df_with_anomalies['is_anomaly'] == 1
+if show_iso_anomalies and not show_lof_anomalies:
+    anomaly_filter = df_with_anomalies['iso_anomaly'] == -1
+elif show_lof_anomalies and not show_iso_anomalies:
+    anomaly_filter = df_with_anomalies['lof_anomaly'] == -1
+
+anomalies_df = df_with_anomalies[anomaly_filter]
+
+if len(anomalies_df) > 0:
+    st.subheader(f"📋 Lista de Anomalias ({len(anomalies_df)} casos)")
+    
+    # Selecionar colunas para exibir
+    display_columns = ['tipo_crime', 'descricao_modus_operandi', 'arma_utilizada', 
+                      'quantidade_vitimas', 'quantidade_suspeitos', 'status_investigacao']
+    
+    # Filtrar apenas colunas que existem
+    available_columns = [col for col in display_columns if col in anomalies_df.columns]
+    
+    if available_columns:
+        st.dataframe(anomalies_df[available_columns], use_container_width=True)
+        
+        # Análise das anomalias
+        st.subheader("📊 Análise das Anomalias")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Distribuição por tipo de crime
+            crime_dist = anomalies_df['tipo_crime'].value_counts()
+            fig_crime = px.bar(x=crime_dist.index, y=crime_dist.values, 
+                              title="Anomalias por Tipo de Crime")
+            st.plotly_chart(fig_crime, use_container_width=True)
+        
+        with col2:
+            # Distribuição por status
+            status_dist = anomalies_df['status_investigacao'].value_counts()
+            fig_status = px.pie(values=status_dist.values, names=status_dist.index,
+                               title="Status das Anomalias")
+            st.plotly_chart(fig_status, use_container_width=True)
+    else:
+        st.warning("⚠️ Colunas necessárias não encontradas no dataset.")
+else:
+    st.info("ℹ️ Nenhuma anomalia encontrada com os filtros selecionados.")

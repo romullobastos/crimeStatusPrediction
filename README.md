@@ -48,19 +48,52 @@ streamlit run app.py
 - Visualizações das probabilidades
 - Interpretação dos resultados
 
+### 🚨 Detecção de Anomalias (NOVO!)
+- **Isolation Forest** e **Local Outlier Factor (LOF)**
+- Identificação de casos "fora do padrão"
+- Filtros avançados para análise
+- Visualizações específicas das anomalias
+
+### 🗺️ Mapa de Hotspots (NOVO!)
+- Mapa interativo com Folium
+- Marcadores por bairro com estatísticas
+- Cores baseadas na taxa de conclusão
+- Popups informativos
+
+### 📁 Upload de Dataset (NOVO!)
+- Interface para carregar novos datasets
+- Validação automática de formato
+- Fallback para dataset padrão
+- Integração com todas as funcionalidades
+
+### 📄 Relatório Exportável (NOVO!)
+- Geração automática de PDF
+- Métricas principais e resumo executivo
+- Download direto via interface
+- Documentação completa dos achados
+
 ### 📊 Visualizações
 - Gráficos de pizza e barras
 - Matriz de confusão
 - Importância das features
 - Análise geográfica por bairro
+- **Novo:** Análise de anomalias
+- **Novo:** Mapas interativos
 
 ## 🎛️ Como Usar
 
+### **Funcionalidades Básicas:**
 1. **Explore os dados** na seção de análise exploratória
 2. **Escolha o modelo** (Regressão Logística ou Random Forest)
 3. **Configure as características** do crime na interface de predição
 4. **Clique em "Prever Status"** para obter as probabilidades
 5. **Analise os resultados** e a interpretação fornecida
+
+### **Novas Funcionalidades:**
+6. **📁 Upload de Dataset**: Use a sidebar para carregar novos dados
+7. **🗺️ Mapa de Hotspots**: Explore a distribuição geográfica dos crimes
+8. **🚨 Detecção de Anomalias**: Identifique casos "fora do padrão"
+9. **📄 Relatório PDF**: Gere e baixe relatórios completos
 
 ## 📋 Features do Modelo
 

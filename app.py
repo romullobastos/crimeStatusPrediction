@@ -32,6 +32,7 @@ st.markdown("---")
 st.header("🧠 Análise Supervisionada (Modelo)")
 
 # Carregar dados
+@st.cache_data(show_spinner=False)
 def load_data():
     df = pd.read_csv('dataset_ocorrencias_delegacia_5.csv')
     
@@ -45,6 +46,7 @@ df = load_data()
 st.sidebar.info("📁 Usando dataset padrão")
 
 # Preparar dados para o modelo (REGRESSÃO LOGÍSTICA)
+@st.cache_data(show_spinner=False)
 def prepare_data(df):
     # Selecionar features categóricas e numéricas (alinhadas com clustering)
     categorical_features = ['tipo_crime', 'descricao_modus_operandi', 'arma_utilizada']
@@ -87,6 +89,7 @@ X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
 # Criar modelo de clustering
+@st.cache_resource(show_spinner=False)
 def create_clustering_model(df):
     """Cria modelo de clustering com as mesmas features da regressão"""
     categorical_features = ['tipo_crime', 'descricao_modus_operandi', 'arma_utilizada']
@@ -114,6 +117,7 @@ def create_clustering_model(df):
     return df_cluster, kmeans, scaler_cluster, le_cluster, cluster_columns
 
 # Função para detecção de anomalias
+@st.cache_resource(show_spinner=False)
 def detect_anomalies(df):
     """Detecta anomalias usando Isolation Forest e LOF"""
     categorical_features = ['tipo_crime', 'descricao_modus_operandi', 'arma_utilizada']

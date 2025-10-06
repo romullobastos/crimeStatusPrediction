@@ -3,11 +3,11 @@ import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import plotly.express as px
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV, RandomizedSearchCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, precision_score
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, precision_score, make_scorer, roc_auc_score, f1_score
 from sklearn.cluster import KMeans
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
@@ -156,16 +156,94 @@ st.header("🤖 Modelo de Predição")
 
 model_choice = st.selectbox("Escolha o modelo:", ["Regressão Logística", "Random Forest"])
 
+# Opções de tunagem de hiperparâmetros
+with st.expander("⚙️ Tunagem de Hiperparâmetros (avançado)", expanded=False):
+    tuning_enabled = st.checkbox("Ativar tunagem", value=False)
+    col_t1, col_t2, col_t3 = st.columns(3)
+    with col_t1:
+        search_type = st.selectbox("Método", ["GridSearch", "RandomizedSearch"]) if tuning_enabled else "GridSearch"
+    with col_t2:
+        scoring_choice = st.selectbox(
+            "Métrica",
+            ["AUC", "F1-Weighted"],
+            help="Métrica para selecionar os melhores hiperparâmetros"
+        ) if tuning_enabled else "AUC"
+    with col_t3:
+        cv_folds = st.number_input("Folds (StratifiedKFold)", min_value=3, max_value=10, value=5, step=1) if tuning_enabled else 5
+    if tuning_enabled and search_type == "RandomizedSearch":
+        n_iter = st.number_input("Iterações (Randomized)", min_value=5, max_value=200, value=25, step=1)
+    else:
+        n_iter = None
+
+# Preparar objetos de tunagem
+best_params = None
+best_cv_score = None
+
 if model_choice == "Regressão Logística":
-    model = LogisticRegression(random_state=42, max_iter=1000)
-    model.fit(X_train_scaled, y_train)
-    y_pred = model.predict(X_test_scaled)
-    y_pred_proba = model.predict_proba(X_test_scaled)[:, 1]
+    if tuning_enabled:
+        # Espaço de busca para Regressão Logística
+        param_grid_lr = {
+            'C': [0.001, 0.01, 0.1, 1.0, 10.0, 100.0],
+            'penalty': ['l2', 'none'],
+            'class_weight': [None, 'balanced'],
+            'solver': ['lbfgs']  # compatível com l2 e none
+        }
+        cv = StratifiedKFold(n_splits=int(cv_folds), shuffle=True, random_state=42)
+        scoring = 'roc_auc' if scoring_choice == 'AUC' else make_scorer(f1_score, average='weighted')
+        base_model = LogisticRegression(max_iter=1000, random_state=42)
+        if search_type == "GridSearch":
+            search = GridSearchCV(base_model, param_grid=param_grid_lr, scoring=scoring, cv=cv, n_jobs=-1, refit=True)
+        else:
+            search = RandomizedSearchCV(base_model, param_distributions=param_grid_lr, n_iter=int(n_iter), scoring=scoring, cv=cv, n_jobs=-1, random_state=42, refit=True)
+        with st.spinner('Executando tunagem (Regressão Logística)...'):
+            search.fit(X_train_scaled, y_train)
+        model = search.best_estimator_
+        best_params = search.best_params_
+        best_cv_score = search.best_score_
+    else:
+        model = LogisticRegression(random_state=42, max_iter=1000)
+        model.fit(X_train_scaled, y_train)
+    # Predições
+    if not tuning_enabled:
+        y_pred = model.predict(X_test_scaled)
+        y_pred_proba = model.predict_proba(X_test_scaled)[:, 1]
+    else:
+        y_pred = model.predict(X_test_scaled)
+        y_pred_proba = model.predict_proba(X_test_scaled)[:, 1]
 else:
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
-    y_pred_proba = model.predict_proba(X_test)[:, 1]
+    if tuning_enabled:
+        # Espaço de busca para Random Forest
+        param_grid_rf = {
+            'n_estimators': [100, 200, 400, 800],
+            'max_depth': [None, 5, 10, 20, 40],
+            'max_features': ['sqrt', 'log2', None, 0.5],
+            'min_samples_split': [2, 5, 10],
+            'min_samples_leaf': [1, 2, 4],
+            'bootstrap': [True, False],
+            'class_weight': [None, 'balanced']
+        }
+        cv = StratifiedKFold(n_splits=int(cv_folds), shuffle=True, random_state=42)
+        scoring = 'roc_auc' if scoring_choice == 'AUC' else make_scorer(f1_score, average='weighted')
+        base_model = RandomForestClassifier(random_state=42)
+        if search_type == "GridSearch":
+            search = GridSearchCV(base_model, param_grid=param_grid_rf, scoring=scoring, cv=cv, n_jobs=-1, refit=True)
+        else:
+            search = RandomizedSearchCV(base_model, param_distributions=param_grid_rf, n_iter=int(n_iter), scoring=scoring, cv=cv, n_jobs=-1, random_state=42, refit=True)
+        with st.spinner('Executando tunagem (Random Forest)...'):
+            search.fit(X_train, y_train)
+        model = search.best_estimator_
+        best_params = search.best_params_
+        best_cv_score = search.best_score_
+    else:
+        model = RandomForestClassifier(n_estimators=100, random_state=42)
+        model.fit(X_train, y_train)
+    # Predições
+    if not tuning_enabled:
+        y_pred = model.predict(X_test)
+        y_pred_proba = model.predict_proba(X_test)[:, 1]
+    else:
+        y_pred = model.predict(X_test)
+        y_pred_proba = model.predict_proba(X_test)[:, 1]
 
 # Interface de predição
 st.header("🎯 Predição de Status")
@@ -338,6 +416,15 @@ with col2:
     st.metric("Precisão", f"{precision:.3f}")
 with col3:
     st.metric("Amostras de Teste", len(y_test))
+
+# Exibir resultados da tunagem, se houver
+if best_params is not None:
+    st.subheader("🧪 Tunagem de Hiperparâmetros")
+    st.write("Melhores parâmetros:")
+    st.json(best_params)
+    if isinstance(best_cv_score, (int, float)):
+        label_metric = "AUC (CV)" if (not isinstance(best_cv_score, str) and (search_type and scoring_choice == 'AUC')) else "Score (CV)"
+        st.metric(label_metric, f"{best_cv_score:.3f}")
 
 # Matriz de confusão
 st.subheader("📊 Matriz de Confusão")

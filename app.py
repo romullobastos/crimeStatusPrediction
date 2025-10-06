@@ -158,20 +158,21 @@ model_choice = st.selectbox("Escolha o modelo:", ["Regressão Logística", "Rand
 
 # Opções de tunagem de hiperparâmetros
 with st.expander("⚙️ Tunagem de Hiperparâmetros (avançado)", expanded=False):
-    tuning_enabled = st.checkbox("Ativar tunagem", value=False)
+    tuning_enabled = st.checkbox("Ativar tunagem", value=False, key="tuning_enabled")
     col_t1, col_t2, col_t3 = st.columns(3)
     with col_t1:
-        search_type = st.selectbox("Método", ["GridSearch", "RandomizedSearch"]) if tuning_enabled else "GridSearch"
+        search_type = st.selectbox("Método", ["GridSearch", "RandomizedSearch"], key="search_type") if tuning_enabled else "GridSearch"
     with col_t2:
         scoring_choice = st.selectbox(
             "Métrica",
             ["AUC", "F1-Weighted"],
-            help="Métrica para selecionar os melhores hiperparâmetros"
+            help="Métrica para selecionar os melhores hiperparâmetros",
+            key="scoring_choice"
         ) if tuning_enabled else "AUC"
     with col_t3:
-        cv_folds = st.number_input("Folds (StratifiedKFold)", min_value=3, max_value=10, value=5, step=1) if tuning_enabled else 5
+        cv_folds = st.number_input("Folds (StratifiedKFold)", min_value=3, max_value=10, value=5, step=1, key="cv_folds") if tuning_enabled else 5
     if tuning_enabled and search_type == "RandomizedSearch":
-        n_iter = st.number_input("Iterações (Randomized)", min_value=5, max_value=200, value=25, step=1)
+        n_iter = st.number_input("Iterações (Randomized)", min_value=5, max_value=200, value=25, step=1, key="n_iter")
     else:
         n_iter = None
 
@@ -381,7 +382,16 @@ st.sidebar.metric("Arquivados", len(df_filtered[df_filtered['status_binario'] ==
 
 # Guia rápido (glossário) para usuários não técnicos
 with st.sidebar.expander("Guia rápido (o que é cada coisa?)", expanded=False):
-    st.markdown("- **Cluster**: grupo de casos parecidos.\n- **Probabilidade**: quão provável um caso ser concluído.\n- **Acurácia**: o quanto o modelo acerta.\n- **Taxa de conclusão**: % de casos concluídos.")
+    st.markdown(
+        "- **Cluster**: grupo de casos parecidos.\n"
+        "- **Probabilidade**: quão provável um caso ser concluído.\n"
+        "- **Acurácia**: o quanto o modelo acerta.\n"
+        "- **Taxa de conclusão**: % de casos concluídos.\n"
+        "- **Tunagem**: busca automática de hiperparâmetros para melhorar a performance.\n"
+        "- **Métrica (AUC/F1-Weighted)**: critério usado para escolher os melhores parâmetros.\n"
+        "- **Folds (StratifiedKFold)**: quantas partições na validação cruzada estratificada.\n"
+        "- **Grid vs Random**: grade exaustiva (Grid) vs amostras aleatórias do espaço (Random)."
+    )
 
 # Análise exploratória
 st.header("📈 Análise Exploratória dos Dados")

@@ -72,13 +72,6 @@ with col1:
     **O sistema usa inteligência artificial para analisar crimes e prever se eles serão resolvidos ou arquivados.**
     """)
 
-with col2:
-    st.markdown("""
-    <div style="background-color: #f0f2f6; padding: 20px; border-radius: 10px; border-left: 5px solid #1f77b4;">
-    <h4 style="margin-top: 0; color: #1f77b4;">💡 Dica</h4>
-    <p style="margin-bottom: 0;">Quanto mais informações você fornecer, mais precisa será a análise!</p>
-    </div>
-    """, unsafe_allow_html=True)
 
 # Cards informativos
 col1, col2 = st.columns(2)

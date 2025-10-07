@@ -597,23 +597,64 @@ if len(anomalies_df) > 0:
         # Análise das anomalias
         st.subheader("📊 O Que Podemos Aprender Destes Casos?")
         
+        # Cards de estatísticas gerais
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("🔍 Total de Casos Atípicos", len(anomalies_df))
+        
+        with col2:
+            arquivados = len(anomalies_df[anomalies_df['status_investigacao'].str.contains('Arquivado', na=False)])
+            taxa_arquivamento = (arquivados / len(anomalies_df)) * 100
+            st.metric("📋 Taxa de Arquivamento", f"{taxa_arquivamento:.1f}%")
+        
+        with col3:
+            concluidos = len(anomalies_df[anomalies_df['status_investigacao'].str.contains('Concluído', na=False)])
+            taxa_conclusao = (concluidos / len(anomalies_df)) * 100
+            st.metric("✅ Taxa de Conclusão", f"{taxa_conclusao:.1f}%")
+        
+        st.markdown("---")
+        
+        # Top crimes atípicos
+        st.subheader("📋 Top 10 Crimes Mais Atípicos")
+        crime_dist = anomalies_df['tipo_crime'].value_counts()
+        top_crimes = crime_dist.head(10)
+        
+        # Criar cards simples para cada crime
+        cols = st.columns(2)
+        for i, (crime, count) in enumerate(top_crimes.items()):
+            percentage = (count / len(anomalies_df)) * 100
+            col_idx = i % 2
+            
+            with cols[col_idx]:
+                # Emoji baseado na posição
+                if i == 0:
+                    emoji = "🥇"
+                elif i == 1:
+                    emoji = "🥈"
+                elif i == 2:
+                    emoji = "🥉"
+                else:
+                    emoji = "🔸"
+                
+                st.info(f"{emoji} **{crime}**: {count} casos ({percentage:.1f}%)")
+        
+        st.markdown("---")
+        
+        # Distribuição por status
+        st.subheader("📈 Como Terminaram Estes Casos Especiais?")
+        
         col1, col2 = st.columns(2)
         
         with col1:
-            # Distribuição por tipo de crime
-            crime_dist = anomalies_df['tipo_crime'].value_counts()
-            st.write("**📋 Que tipos de crimes são mais atípicos?**")
-            for crime, count in crime_dist.items():
-                percentage = (count / len(anomalies_df)) * 100
-                st.write(f"• {crime}: {count} casos ({percentage:.1f}% dos casos atípicos)")
+            arquivados = len(anomalies_df[anomalies_df['status_investigacao'].str.contains('Arquivado', na=False)])
+            perc_arquivados = (arquivados / len(anomalies_df)) * 100
+            st.metric("📋 Casos Arquivados", arquivados, f"{perc_arquivados:.1f}% dos atípicos")
         
         with col2:
-            # Distribuição por status
-            status_dist = anomalies_df['status_investigacao'].value_counts()
-            st.write("**📈 Como terminaram estes casos especiais?**")
-            for status, count in status_dist.items():
-                percentage = (count / len(anomalies_df)) * 100
-                st.write(f"• {status}: {count} casos ({percentage:.1f}% dos casos atípicos)")
+            concluidos = len(anomalies_df[anomalies_df['status_investigacao'].str.contains('Concluído', na=False)])
+            perc_concluidos = (concluidos / len(anomalies_df)) * 100
+            st.metric("✅ Casos Concluídos", concluidos, f"{perc_concluidos:.1f}% dos atípicos")
     else:
         st.warning("⚠️ Não foi possível mostrar os detalhes dos casos atípicos.")
 else:

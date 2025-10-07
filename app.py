@@ -15,6 +15,39 @@ import folium
 import warnings
 warnings.filterwarnings('ignore')
 
+# Configuração do Plotly para suprimir avisos de depreciação
+import plotly.io as pio
+pio.templates.default = "plotly"
+
+# Configuração para suprimir avisos específicos do Plotly
+import logging
+logging.getLogger('plotly').setLevel(logging.CRITICAL)
+logging.getLogger('plotly.graph_objects').setLevel(logging.CRITICAL)
+logging.getLogger('plotly.express').setLevel(logging.CRITICAL)
+
+# Configuração adicional para suprimir avisos de depreciação
+import os
+os.environ['PLOTLY_DISABLE_DEPRECATION_WARNINGS'] = '1'
+
+# Suprimir warnings do Python relacionados ao Plotly
+import warnings
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='plotly')
+warnings.filterwarnings('ignore', message='.*keyword arguments have been deprecated.*')
+warnings.filterwarnings('ignore', message='.*deprecated.*')
+warnings.filterwarnings('ignore', message='.*will be removed.*')
+warnings.filterwarnings('ignore', message='.*Use config instead.*')
+warnings.filterwarnings('ignore', message='.*Please replace.*')
+
+# Configuração adicional para suprimir avisos do Plotly
+import logging
+logging.getLogger('plotly').disabled = True
+logging.getLogger('plotly.graph_objects').disabled = True
+logging.getLogger('plotly.express').disabled = True
+
+# Importar bibliotecas necessárias
+import plotly.express as px
+import plotly.graph_objects as go
+
 # Configuração da página
 st.set_page_config(
     page_title="Predição de Status de Crimes",
@@ -23,13 +56,59 @@ st.set_page_config(
 )
 
 # Título principal
-st.title("🔍 Predição de Status de Crimes com Análise de Clusters")
-st.markdown("**Modelo Integrado: Regressão Logística + Clustering para prever probabilidade de conclusão/arquivamento**")
-st.markdown("*Features Alinhadas: Tipo de Crime, Modus Operandi, Arma, Quantidade de Vítimas/Suspeitos (Ambos os modelos)*")
+st.title("🔍 Sistema de Predição de Crimes")
+st.markdown("**Sistema Inteligente para Prever se um Crime será Resolvido ou Arquivado**")
+st.markdown("*Baseado em características como: tipo de crime, como foi cometido, arma usada e número de pessoas envolvidas*")
 
 # Organização visual
 st.markdown("---")
-st.header("🧠 Análise Supervisionada (Modelo)")
+
+# Seção principal com layout melhorado
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    st.header("🤖 Como Funciona o Sistema")
+    st.markdown("""
+    **O sistema usa inteligência artificial para analisar crimes e prever se eles serão resolvidos ou arquivados.**
+    """)
+
+with col2:
+    st.markdown("""
+    <div style="background-color: #f0f2f6; padding: 20px; border-radius: 10px; border-left: 5px solid #1f77b4;">
+    <h4 style="margin-top: 0; color: #1f77b4;">💡 Dica</h4>
+    <p style="margin-bottom: 0;">Quanto mais informações você fornecer, mais precisa será a análise!</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Cards informativos
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown("""
+    <div style="background-color: #e8f4fd; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+    <h4 style="margin-top: 0; color: #1f77b4;">🔍 O que o sistema analisa</h4>
+    <ul style="margin-bottom: 0;">
+    <li>Tipo de crime cometido</li>
+    <li>Como o crime foi executado</li>
+    <li>Arma utilizada</li>
+    <li>Quantidade de vítimas</li>
+    <li>Quantidade de suspeitos</li>
+    </ul>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col2:
+    st.markdown("""
+    <div style="background-color: #f0f8e8; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+    <h4 style="margin-top: 0; color: #2e7d32;">📊 O que o sistema faz</h4>
+    <ul style="margin-bottom: 0;">
+    <li>Agrupa crimes similares</li>
+    <li>Identifica padrões de resolução</li>
+    <li>Detecta casos atípicos</li>
+    <li>Calcula probabilidades</li>
+    </ul>
+    </div>
+    """, unsafe_allow_html=True)
 
 # Carregar dados
 @st.cache_data(show_spinner=False)
@@ -140,8 +219,11 @@ def detect_anomalies(df):
     iso_forest = IsolationForest(contamination=0.1, random_state=42)
     iso_anomalies = iso_forest.fit_predict(X_anomaly_scaled)
     
-    lof = LocalOutlierFactor(n_neighbors=20, contamination=0.1)
-    lof_anomalies = lof.fit_predict(X_anomaly_scaled)
+    # Ajustar n_neighbors baseado no tamanho dos dados
+    n_neighbors = min(20, max(5, len(X_anomaly_scaled) // 10))
+    lof = LocalOutlierFactor(n_neighbors=n_neighbors, contamination=0.1, novelty=True)
+    lof.fit(X_anomaly_scaled)
+    lof_anomalies = lof.predict(X_anomaly_scaled)
     
     df_anomaly['iso_anomaly'] = iso_anomalies
     df_anomaly['lof_anomaly'] = lof_anomalies
@@ -156,122 +238,173 @@ df_with_clusters, kmeans_model, scaler_cluster, le_cluster, cluster_columns = cr
 df_with_anomalies, iso_model, lof_model, scaler_anomaly, le_anomaly, anomaly_columns = detect_anomalies(df_filtered)
 
 # Treinar modelo
-st.header("🤖 Modelo de Predição")
+st.header("🎯 Faça sua Predição")
 
-model_choice = st.selectbox("Escolha o modelo:", ["Regressão Logística", "Random Forest"])
+st.markdown("""
+**Selecione as características do crime abaixo e o sistema irá:**
+- Calcular a probabilidade de ser resolvido ou arquivado
+- Mostrar em qual grupo de crimes similares ele se encaixa
+- Indicar se é um caso atípico que merece atenção especial
+""")
 
-# Opções de tunagem de hiperparâmetros
-with st.expander("⚙️ Tunagem de Hiperparâmetros (avançado)", expanded=False):
-    tuning_enabled = st.checkbox("Ativar tunagem", value=False, key="tuning_enabled")
-    col_t1, col_t2, col_t3 = st.columns(3)
-    with col_t1:
-        search_type = st.selectbox("Método", ["GridSearch", "RandomizedSearch"], key="search_type") if tuning_enabled else "GridSearch"
-    with col_t2:
-        scoring_choice = st.selectbox(
-            "Métrica",
-            ["AUC", "F1-Weighted"],
-            help="Métrica para selecionar os melhores hiperparâmetros",
-            key="scoring_choice"
-        ) if tuning_enabled else "AUC"
-    with col_t3:
-        cv_folds = st.number_input("Folds (StratifiedKFold)", min_value=3, max_value=10, value=5, step=1, key="cv_folds") if tuning_enabled else 5
-    if tuning_enabled and search_type == "RandomizedSearch":
-        n_iter = st.number_input("Iterações (Randomized)", min_value=5, max_value=200, value=25, step=1, key="n_iter")
-    else:
-        n_iter = None
+model_choice = st.selectbox("Escolha o modelo:", ["Random Forest"], disabled=True)
+st.info("💡 **Random Forest** é um algoritmo de inteligência artificial que combina múltiplas 'árvores de decisão' para fazer predições mais precisas e confiáveis.")
+
+# Configurações do sistema
+st.subheader("⚙️ Configurações do Sistema")
+
+# Explicação simples sobre tunagem
+st.markdown("""
+**O que é ajuste automático?**
+- O sistema pode testar diferentes configurações para encontrar a melhor precisão
+- Isso pode melhorar a qualidade das predições, mas demora mais tempo
+- Você pode escolher se quer usar ou não
+""")
+
+# Opção simples de ativar/desativar
+tuning_enabled = st.radio(
+    "Escolha uma opção:",
+    ["🚀 Usar configurações rápidas (recomendado)", "🔍 Ajustar automaticamente para melhor precisão"],
+    help="A primeira opção é mais rápida, a segunda pode ser mais precisa"
+)
+
+# Se escolher ajuste automático, mostrar opções simples
+if "Ajustar automaticamente" in tuning_enabled:
+    st.markdown("**Configurações de ajuste:**")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Opção simples de velocidade vs precisão
+        speed_choice = st.selectbox(
+            "Velocidade do ajuste:",
+            ["Rápido (5 tentativas)", "Médio (15 tentativas)", "Lento (30 tentativas)"],
+            help="Mais tentativas = melhor precisão, mas demora mais"
+        )
+        
+        # Mapear para número de iterações
+        if "Rápido" in speed_choice:
+            n_iter = 5
+        elif "Médio" in speed_choice:
+            n_iter = 15
+        else:
+            n_iter = 30
+    
+    with col2:
+        # Critério de qualidade simplificado
+        quality_choice = st.selectbox(
+            "Critério de qualidade:",
+            ["Precisão geral", "Balanceamento de classes"],
+            help="Precisão geral: foca na acurácia total. Balanceamento: trata classes desiguais melhor"
+        )
+        
+        # Mapear para scoring
+        if "Precisão geral" in quality_choice:
+            scoring = 'f1'
+        else:
+            scoring = 'roc_auc'
+    
+    # Configurações fixas para simplificar
+    search_type = "Busca Aleatória"
+    cv_folds = 5
+    
+    st.info(f"🔧 O sistema vai testar {n_iter} configurações diferentes para encontrar a melhor precisão.")
+else:
+    # Configurações padrão quando não usar tunagem
+    search_type = "Busca Exaustiva"
+    scoring = 'roc_auc'
+    cv_folds = 5
+    n_iter = None
 
 # Preparar objetos de tunagem
 best_params = None
 best_cv_score = None
 
-if model_choice == "Regressão Logística":
-    if tuning_enabled:
-        # Espaço de busca para Regressão Logística
-        param_grid_lr = {
-            'C': [0.001, 0.01, 0.1, 1.0, 10.0, 100.0],
-            'penalty': ['l2', 'none'],
-            'class_weight': [None, 'balanced'],
-            'solver': ['lbfgs']  # compatível com l2 e none
-        }
-        cv = StratifiedKFold(n_splits=int(cv_folds), shuffle=True, random_state=42)
-        scoring = 'roc_auc' if scoring_choice == 'AUC' else make_scorer(f1_score, average='weighted')
-        base_model = LogisticRegression(max_iter=1000, random_state=42)
-        if search_type == "GridSearch":
-            search = GridSearchCV(base_model, param_grid=param_grid_lr, scoring=scoring, cv=cv, n_jobs=-1, refit=True)
-        else:
-            search = RandomizedSearchCV(base_model, param_distributions=param_grid_lr, n_iter=int(n_iter), scoring=scoring, cv=cv, n_jobs=-1, random_state=42, refit=True)
-        with st.spinner('Executando tunagem (Regressão Logística)...'):
-            search.fit(X_train_scaled, y_train)
-        model = search.best_estimator_
-        best_params = search.best_params_
-        best_cv_score = search.best_score_
-    else:
-        model = LogisticRegression(random_state=42, max_iter=1000)
-        model.fit(X_train_scaled, y_train)
-    # Predições
-    if not tuning_enabled:
-        y_pred = model.predict(X_test_scaled)
-        y_pred_proba = model.predict_proba(X_test_scaled)[:, 1]
-    else:
-        y_pred = model.predict(X_test_scaled)
-        y_pred_proba = model.predict_proba(X_test_scaled)[:, 1]
-else:
-    if tuning_enabled:
-        # Espaço de busca para Random Forest
+# Função de treinamento com cache inteligente
+@st.cache_resource(show_spinner=False)
+def train_model_with_cache(X_train, y_train, tuning_enabled, search_type, scoring, cv_folds, n_iter):
+    """Treina modelo com cache baseado nas configurações de tunagem"""
+    
+    if "Ajustar automaticamente" in tuning_enabled:
+        # Espaço de busca otimizado para Random Forest
         param_grid_rf = {
-            'n_estimators': [100, 200, 400, 800],
-            'max_depth': [None, 5, 10, 20, 40],
-            'max_features': ['sqrt', 'log2', None, 0.5],
+            'n_estimators': [100, 200, 300],
+            'max_depth': [None, 10, 20],
+            'max_features': ['sqrt', 'log2'],
             'min_samples_split': [2, 5, 10],
-            'min_samples_leaf': [1, 2, 4],
+            'min_samples_leaf': [1, 2],
             'bootstrap': [True, False],
             'class_weight': [None, 'balanced']
         }
-        cv = StratifiedKFold(n_splits=int(cv_folds), shuffle=True, random_state=42)
-        scoring = 'roc_auc' if scoring_choice == 'AUC' else make_scorer(f1_score, average='weighted')
-        base_model = RandomForestClassifier(random_state=42)
-        if search_type == "GridSearch":
-            search = GridSearchCV(base_model, param_grid=param_grid_rf, scoring=scoring, cv=cv, n_jobs=-1, refit=True)
+        
+        if search_type == "Busca Aleatória":
+            search = RandomizedSearchCV(
+                RandomForestClassifier(random_state=42),
+                param_grid_rf,
+                n_iter=n_iter,
+                cv=cv_folds,
+                scoring=scoring,
+                random_state=42,
+                n_jobs=-1
+            )
         else:
-            search = RandomizedSearchCV(base_model, param_distributions=param_grid_rf, n_iter=int(n_iter), scoring=scoring, cv=cv, n_jobs=-1, random_state=42, refit=True)
-        with st.spinner('Executando tunagem (Random Forest)...'):
-            search.fit(X_train, y_train)
-        model = search.best_estimator_
-        best_params = search.best_params_
-        best_cv_score = search.best_score_
+            search = GridSearchCV(
+                RandomForestClassifier(random_state=42),
+                param_grid_rf,
+                cv=cv_folds,
+                scoring=scoring,
+                n_jobs=-1
+            )
+        
+        search.fit(X_train, y_train)
+        return search.best_estimator_, search.best_params_, search.best_score_
     else:
-        model = RandomForestClassifier(n_estimators=100, random_state=42)
+        # Usar configurações otimizadas padrão
+        model = RandomForestClassifier(
+            n_estimators=200,
+            max_depth=None,
+            max_features='sqrt',
+            min_samples_split=10,
+            min_samples_leaf=1,
+            bootstrap=False,
+            class_weight='balanced',
+            random_state=42
+        )
         model.fit(X_train, y_train)
-    # Predições
-    if not tuning_enabled:
-        y_pred = model.predict(X_test)
-        y_pred_proba = model.predict_proba(X_test)[:, 1]
-    else:
-        y_pred = model.predict(X_test)
-        y_pred_proba = model.predict_proba(X_test)[:, 1]
+        return model, None, None
+
+# Treinar modelo
+with st.spinner("🔍 Treinando modelo..."):
+    model, best_params, best_cv_score = train_model_with_cache(
+        X_train, y_train, tuning_enabled, search_type, scoring, cv_folds, n_iter
+    )
+
+# Predições
+y_pred = model.predict(X_test)
+y_pred_proba = model.predict_proba(X_test)[:, 1]
 
 # Interface de predição
-st.header("🎯 Predição de Status")
+st.header("📝 Preencha as Informações do Crime")
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("Selecione as características do crime:")
+    st.subheader("Características do Crime:")
     
     # Inputs para predição (apenas features relevantes)
     tipo_crime = st.selectbox("Tipo de Crime", df['tipo_crime'].unique())
-    modus_operandi = st.selectbox("Modus Operandi", df['descricao_modus_operandi'].unique())
+    modus_operandi = st.selectbox("Como foi cometido", df['descricao_modus_operandi'].unique())
     arma = st.selectbox("Arma Utilizada", df['arma_utilizada'].unique())
 
 with col2:
-    st.subheader("Informações numéricas:")
+    st.subheader("Pessoas Envolvidas:")
     
     qtd_vitimas = st.slider("Quantidade de Vítimas", 0, 4, 1)
     qtd_suspeitos = st.slider("Quantidade de Suspeitos", 0, 4, 1)
 
 # Botão de predição
-if st.button("🔮 Prever Status e Cluster", type="primary"):
-    # Preparar dados de entrada (MESMAS features para ambos os modelos)
+if st.button("🔮 Analisar Crime", type="primary"):
+    # Preparar dados de entrada
     input_data = {
         'tipo_crime': tipo_crime,
         'descricao_modus_operandi': modus_operandi,
@@ -291,11 +424,7 @@ if st.button("🔮 Prever Status e Cluster", type="primary"):
     X_input = input_df[feature_columns]
     
     # Fazer predição de status
-    if model_choice == "Regressão Logística":
-        X_input_scaled = scaler.transform(X_input)
-        proba = model.predict_proba(X_input_scaled)[0]
-    else:
-        proba = model.predict_proba(X_input)[0]
+    proba = model.predict_proba(X_input)[0]
     
     # Usar os mesmos dados para clustering (features já alinhadas)
     input_df_cluster = input_df.copy()
@@ -311,8 +440,18 @@ if st.button("🔮 Prever Status e Cluster", type="primary"):
     # Fazer predição de cluster
     predicted_cluster = kmeans_model.predict(X_input_cluster_scaled)[0]
     
+    # Verificar se é anomalia
+    X_input_anomaly = input_df_cluster[anomaly_columns]
+    X_input_anomaly_scaled = scaler_anomaly.transform(X_input_anomaly)
+
+    iso_pred = iso_model.predict(X_input_anomaly_scaled)[0]
+    
+    # Usar o modelo LOF já treinado para predição
+    lof_pred = lof_model.predict(X_input_anomaly_scaled)[0]
+    is_anomaly = (iso_pred == -1) or (lof_pred == -1)
+    
     # Exibir resultados
-    st.subheader("🎯 Resultado da Predição")
+    st.subheader("🎯 O Que o Sistema Descobriu")
     
     col1, col2, col3 = st.columns(3)
     
@@ -321,23 +460,27 @@ if st.button("🔮 Prever Status e Cluster", type="primary"):
         st.metric("Probabilidade de Conclusão", f"{proba[1]:.1%}")
     
     with col2:
-        st.metric("Cluster Predito", f"Cluster {predicted_cluster}")
+        st.metric("Grupo de Crimes Similares", f"Grupo {predicted_cluster}")
         
         # Análise do cluster predito
         cluster_data = df_with_clusters[df_with_clusters['cluster'] == predicted_cluster]
         cluster_completion_rate = cluster_data['status_binario'].mean() * 100
-        st.metric("Taxa de Conclusão do Cluster", f"{cluster_completion_rate:.1f}%")
+        st.metric("Taxa de Conclusão do Grupo", f"{cluster_completion_rate:.1f}%")
     
     with col3:
-        # Gráfico de barras das probabilidades
-        fig_proba = px.bar(x=['Arquivado', 'Concluído'], y=proba, 
-                          title="Probabilidades de Status",
-                          labels={'x': 'Status', 'y': 'Probabilidade'})
-        fig_proba.update_layout(yaxis_tickformat='.1%')
-        st.plotly_chart(fig_proba, use_container_width=True)
+        # Status da anomalia
+        if is_anomaly:
+            st.error("🚨 **CASO ATÍPICO**")
+            st.markdown("Este crime tem características muito diferentes dos casos normais e merece atenção especial.")
+        else:
+            st.success("✅ **CASO PADRÃO**")
+            st.markdown("Este crime segue padrões similares aos casos já conhecidos.")
+
+        # Exibir probabilidades em formato de texto
+        st.info(f"📊 **Probabilidade de Arquivamento:** {proba[0]:.1%} | **Probabilidade de Conclusão:** {proba[1]:.1%}")
     
     # Análise do cluster predito
-    st.subheader(f"📊 Análise do Cluster {predicted_cluster}")
+    st.subheader(f"📊 O Que Sabemos Sobre o Grupo {predicted_cluster}")
     
     cluster_analysis = cluster_data.groupby('status_investigacao').size()
     cluster_analysis_pct = cluster_data['status_investigacao'].value_counts(normalize=True) * 100
@@ -345,25 +488,25 @@ if st.button("🔮 Prever Status e Cluster", type="primary"):
     col1, col2 = st.columns(2)
     
     with col1:
-        st.write("**Distribuição no Cluster:**")
+        st.write("**📊 Como os crimes deste grupo costumam terminar:**")
         st.dataframe(cluster_analysis_pct.round(1))
     
     with col2:
         # Características dominantes do cluster
-        st.write("**Características Dominantes:**")
+        st.write("**🔍 O que é comum neste grupo de crimes:**")
         tipo_dominante = cluster_data['tipo_crime'].mode()[0]
         modus_dominante = cluster_data['descricao_modus_operandi'].mode()[0]
         arma_dominante = cluster_data['arma_utilizada'].mode()[0]
         
-        st.write(f"• **Tipo de Crime:** {tipo_dominante}")
-        st.write(f"• **Modus Operandi:** {modus_dominante}")
-        st.write(f"• **Arma:** {arma_dominante}")
-        st.write(f"• **Vítimas médias:** {cluster_data['quantidade_vitimas'].mean():.1f}")
+        st.write(f"• **Tipo de Crime mais comum:** {tipo_dominante}")
+        st.write(f"• **Como costuma ser cometido:** {modus_dominante}")
+        st.write(f"• **Arma mais usada:** {arma_dominante}")
+        st.write(f"• **Número médio de vítimas:** {cluster_data['quantidade_vitimas'].mean():.1f}")
         st.write(f"• **Suspeitos médios:** {cluster_data['quantidade_suspeitos'].mean():.1f}")
     
     # Interpretação
     if proba[1] > 0.6:
-        st.success("✅ **Alta probabilidade de CONCLUSÃO** - O caso tem características que favorecem a conclusão da investigação.")
+        st.success("✅ **Alta probabilidade de CONCLUSÃO** - O caso tem características que favorecem a resolução da investigação.")
     elif proba[0] > 0.6:
         st.warning("⚠️ **Alta probabilidade de ARQUIVAMENTO** - O caso tem características que podem levar ao arquivamento.")
     else:
@@ -371,214 +514,150 @@ if st.button("🔮 Prever Status e Cluster", type="primary"):
     
     # Interpretação do cluster
     if cluster_completion_rate > 60:
-        st.info(f"🔍 **Cluster {predicted_cluster}** tem alta taxa de conclusão ({cluster_completion_rate:.1f}%), indicando casos similares tendem a ser resolvidos.")
+        st.info(f"🔍 **Grupo {predicted_cluster}** tem alta taxa de conclusão ({cluster_completion_rate:.1f}%), indicando que crimes similares tendem a ser resolvidos.")
     elif cluster_completion_rate < 40:
-        st.warning(f"🔍 **Cluster {predicted_cluster}** tem baixa taxa de conclusão ({cluster_completion_rate:.1f}%), indicando casos similares tendem a ser arquivados.")
+        st.warning(f"🔍 **Grupo {predicted_cluster}** tem baixa taxa de conclusão ({cluster_completion_rate:.1f}%), indicando que crimes similares tendem a ser arquivados.")
     else:
-        st.info(f"🔍 **Cluster {predicted_cluster}** tem taxa equilibrada de conclusão ({cluster_completion_rate:.1f}%).")
+        st.info(f"🔍 **Grupo {predicted_cluster}** tem taxa equilibrada de conclusão ({cluster_completion_rate:.1f}%).")
 
-# Sidebar para filtros
-st.sidebar.header("📊 Filtros e Configurações")
+# Tela de Anomalias
+st.markdown("---")
+st.header("🚨 Detecção de Casos Atípicos")
 
-st.sidebar.metric("Total de Ocorrências", len(df_filtered))
-st.sidebar.metric("Concluídos", len(df_filtered[df_filtered['status_binario'] == 1]))
-st.sidebar.metric("Arquivados", len(df_filtered[df_filtered['status_binario'] == 0]))
+st.markdown("""
+**O sistema identifica crimes que são muito diferentes dos casos normais.**
 
-# Guia rápido (glossário) para usuários não técnicos
-with st.sidebar.expander("Guia rápido (o que é cada coisa?)", expanded=False):
-    st.markdown(
-        "- **Cluster**: grupo de casos parecidos.\n"
-        "- **Probabilidade**: quão provável um caso ser concluído.\n"
-        "- **Acurácia**: o quanto o modelo acerta.\n"
-        "- **Taxa de conclusão**: % de casos concluídos.\n"
-        "- **Tunagem**: busca automática de hiperparâmetros para melhorar a performance.\n"
-        "- **Métrica (AUC/F1-Weighted)**: critério usado para escolher os melhores parâmetros.\n"
-        "- **Folds (StratifiedKFold)**: quantas partições na validação cruzada estratificada.\n"
-        "- **Grid vs Random**: grade exaustiva (Grid) vs amostras aleatórias do espaço (Random)."
-    )
+**🔍 Por que isso é importante?**
+- **Casos atípicos** podem indicar novos tipos de crime
+- **Merecem atenção especial** da polícia
+- **Podem revelar padrões** que não foram identificados antes
+- **Ajudam a melhorar** as estratégias de investigação
 
-# Análise exploratória
-st.header("📈 Análise Exploratória dos Dados")
+**📊 Como funciona:**
+O sistema compara cada crime com todos os outros e identifica aqueles que têm características muito diferentes do padrão normal.
+""")
 
-col1, col2 = st.columns(2)
-
-with col1:
-    # Distribuição do status
-    status_counts = df_filtered['status_investigacao'].value_counts()
-    fig_pie = px.pie(values=status_counts.values, names=status_counts.index, 
-                     title="Distribuição do Status das Ocorrências")
-    st.plotly_chart(fig_pie, use_container_width=True)
-
-with col2:
-    # Status por tipo de crime (visão geral do conjunto rotulado)
-    status_crime = pd.crosstab(df_filtered['tipo_crime'], df_filtered['status_investigacao'])
-    fig_bar = px.bar(status_crime, title="Status por Tipo de Crime", 
-                     labels={'value': 'Quantidade', 'index': 'Tipo de Crime'})
-    st.plotly_chart(fig_bar, use_container_width=True)
-
-# Métricas do modelo
-st.header("📊 Performance do Modelo")
-
-accuracy = accuracy_score(y_test, y_pred)
+# Estatísticas de anomalias
+anomaly_stats = df_with_anomalies['is_anomaly'].value_counts()
+total_anomalies = anomaly_stats.get(1, 0)
+total_normal = anomaly_stats.get(0, 0)
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.metric("Acurácia", f"{accuracy:.3f}")
+    st.metric("Casos Atípicos Encontrados", total_anomalies)
 with col2:
-    # Calcular precisão média
-    precision = precision_score(y_test, y_pred, average='weighted')
-    st.metric("Precisão", f"{precision:.3f}")
+    st.metric("Casos Normais", total_normal)
 with col3:
-    st.metric("Amostras de Teste", len(y_test))
+    anomaly_rate = (total_anomalies / len(df_with_anomalies)) * 100
+    st.metric("Taxa de Casos Atípicos", f"{anomaly_rate:.1f}%")
 
-# Exibir resultados da tunagem, se houver
-if best_params is not None:
-    st.subheader("🧪 Tunagem de Hiperparâmetros")
-    st.write("Melhores parâmetros:")
-    st.json(best_params)
-    if isinstance(best_cv_score, (int, float)):
-        label_metric = "AUC (CV)" if (not isinstance(best_cv_score, str) and (search_type and scoring_choice == 'AUC')) else "Score (CV)"
-        st.metric(label_metric, f"{best_cv_score:.3f}")
+# Filtros para anomalias
+st.subheader("🔍 Como Quer Ver os Casos Atípicos?")
 
-# Matriz de confusão
-st.subheader("📊 Matriz de Confusão")
-cm = confusion_matrix(y_test, y_pred)
-fig_cm = px.imshow(cm, text_auto=True, aspect="auto", 
-                   labels=dict(x="Predito", y="Real", color="Quantidade"),
-                   x=['Arquivado', 'Concluído'], y=['Arquivado', 'Concluído'])
-st.plotly_chart(fig_cm, use_container_width=True)
+st.markdown("""
+**O que são esses filtros?**
+- O sistema usa duas formas diferentes de encontrar casos atípicos
+- Você pode escolher ver casos encontrados por cada método ou por ambos
+- Isso ajuda a entender melhor quais casos são realmente diferentes
+""")
 
-# Relatório de classificação
-st.subheader("📋 Relatório de Classificação")
-report = classification_report(y_test, y_pred, target_names=['Arquivado', 'Concluído'], output_dict=True)
-st.dataframe(pd.DataFrame(report).transpose())
+col1, col2 = st.columns(2)
+with col1:
+    show_iso_anomalies = st.checkbox("📊 Mostrar casos encontrados pelo método principal", value=True, help="Método que identifica casos muito diferentes do padrão normal")
+with col2:
+    show_lof_anomalies = st.checkbox("🔍 Mostrar casos encontrados pelo método de comparação", value=True, help="Método que compara com casos similares para encontrar diferenças")
 
-# Feature importance (apenas para Random Forest)
-if model_choice == "Random Forest":
-    st.subheader("🔍 Importância das Features")
-    feature_importance = pd.DataFrame({
-        'feature': feature_columns,
-        'importance': model.feature_importances_
-    }).sort_values('importance', ascending=False)
+# Filtrar anomalias
+anomaly_filter = df_with_anomalies['is_anomaly'] == 1
+if show_iso_anomalies and not show_lof_anomalies:
+    anomaly_filter = df_with_anomalies['iso_anomaly'] == -1
+elif show_lof_anomalies and not show_iso_anomalies:
+    anomaly_filter = df_with_anomalies['lof_anomaly'] == -1
+
+anomalies_df = df_with_anomalies[anomaly_filter]
+
+if len(anomalies_df) > 0:
+    st.subheader(f"📋 Casos Que Precisam de Atenção Especial ({len(anomalies_df)} casos encontrados)")
     
-    fig_importance = px.bar(feature_importance.head(10), x='importance', y='feature',
-                           title="Top 10 Features Mais Importantes",
-                           orientation='h')
-    st.plotly_chart(fig_importance, use_container_width=True)
-
-# Análise de clusters
-st.markdown("")
-
-st.markdown("---")
-st.header("🧩 Análise Não Supervisionada (Clusters)")
-st.subheader("🔗 Relação entre Clusters (K-Means) e Predições do Modelo")
-
-# Usar features já codificadas do modelo de clustering
-X_all = df_with_clusters[cluster_columns]
-
-# Probabilidades preditas para TODO o conjunto (coerente com o modelo escolhido)
-if model_choice == "Regressão Logística":
-    X_all_scaled = scaler.transform(X_all)
-    proba_all = model.predict_proba(X_all_scaled)[:, 1]
+    st.info("""
+    💡 **Por que estes casos são especiais?**
+    - São muito diferentes dos crimes normais que vemos
+    - Podem ter características únicas que merecem investigação especial
+    - Podem indicar novos tipos de crimes ou padrões criminais
+    """)
+    
+    # Selecionar colunas para exibir
+    display_columns = ['tipo_crime', 'descricao_modus_operandi', 'arma_utilizada', 
+                      'quantidade_vitimas', 'quantidade_suspeitos', 'status_investigacao']
+    
+    # Filtrar apenas colunas que existem
+    available_columns = [col for col in display_columns if col in anomalies_df.columns]
+    
+    if available_columns:
+        # Renomear colunas para melhor compreensão
+        display_df = anomalies_df[available_columns].copy()
+        display_df.columns = ['Tipo de Crime', 'Como foi Cometido', 'Arma Utilizada', 
+                             'Quantidade de Vítimas', 'Quantidade de Suspeitos', 'Desfecho']
+        
+        st.dataframe(display_df, width='stretch')
+        
+        # Análise das anomalias
+        st.subheader("📊 O Que Podemos Aprender Destes Casos?")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Distribuição por tipo de crime
+            crime_dist = anomalies_df['tipo_crime'].value_counts()
+            st.write("**📋 Que tipos de crimes são mais atípicos?**")
+            for crime, count in crime_dist.items():
+                percentage = (count / len(anomalies_df)) * 100
+                st.write(f"• {crime}: {count} casos ({percentage:.1f}% dos casos atípicos)")
+        
+        with col2:
+            # Distribuição por status
+            status_dist = anomalies_df['status_investigacao'].value_counts()
+            st.write("**📈 Como terminaram estes casos especiais?**")
+            for status, count in status_dist.items():
+                percentage = (count / len(anomalies_df)) * 100
+                st.write(f"• {status}: {count} casos ({percentage:.1f}% dos casos atípicos)")
+    else:
+        st.warning("⚠️ Não foi possível mostrar os detalhes dos casos atípicos.")
 else:
-    proba_all = model.predict_proba(X_all)[:, 1]
+    st.info("""
+    ℹ️ **Nenhum caso atípico encontrado com os filtros selecionados.**
+    
+    Isso pode significar que:
+    - Todos os casos seguem padrões normais
+    - Os filtros estão muito restritivos
+    - Tente ajustar os filtros acima para ver mais casos
+    """)
 
-pred_label_all = (proba_all >= 0.5).astype(int)
-
-# Anexar probabilidades e rótulos ao dataframe com clusters
-df_rel = df_with_clusters.copy()
-df_rel = df_rel.reset_index(drop=True)
-
-# Garantir alinhamento por índice com df_filtered
-df_rel['proba_concluido'] = pd.Series(proba_all).values
-df_rel['predito_binario'] = pd.Series(pred_label_all).values
-df_rel['status_predito'] = np.where(df_rel['predito_binario'] == 1, 'Concluído', 'Arquivado')
-
-st.subheader("Distribuição de Probabilidades por Cluster")
-fig_box = px.box(
-    df_rel,
-    x='cluster', y='proba_concluido', color='cluster',
-    labels={'cluster': 'Cluster', 'proba_concluido': 'Probabilidade de Conclusão (Predita)'},
-    title='Probabilidades de Conclusão por Cluster (Supervisionado vs Clusters)'
-)
-fig_box.update_layout(showlegend=False)
-st.plotly_chart(fig_box, use_container_width=True)
-
-# Métricas por cluster: tamanho, taxa real, taxa predita média e acurácia por cluster
-st.subheader("Métricas por Cluster")
-cluster_metrics = df_rel.groupby('cluster').apply(
-    lambda g: pd.Series({
-        'Total_Casos': int(len(g)),
-        'Taxa_Conclusao_Real': float(g['status_binario'].mean()),
-        'Prob_Predita_Media': float(g['proba_concluido'].mean()),
-        'Acuracia_Predito': float((g['predito_binario'] == g['status_binario']).mean())
-    })
-).reset_index()
-
-cluster_metrics['Taxa_Conclusao_Real'] = cluster_metrics['Taxa_Conclusao_Real'].round(3)
-cluster_metrics['Prob_Predita_Media'] = cluster_metrics['Prob_Predita_Media'].round(3)
-cluster_metrics['Acuracia_Predito'] = cluster_metrics['Acuracia_Predito'].round(3)
-
-st.dataframe(cluster_metrics.sort_values('Acuracia_Predito', ascending=False))
-
-col_a, col_b = st.columns(2)
-with col_a:
-    fig_acc = px.bar(
-        cluster_metrics,
-        x='cluster', y='Acuracia_Predito',
-        title='Acurácia por Cluster',
-        labels={'Acuracia_Predito': 'Acurácia'}
-    )
-    fig_acc.update_layout(yaxis_tickformat='.0%')
-    st.plotly_chart(fig_acc, use_container_width=True)
-
-with col_b:
-    fig_cal = px.bar(
-        cluster_metrics,
-        x='cluster', y='Prob_Predita_Media',
-        title='Probabilidade Predita Média por Cluster',
-        labels={'Prob_Predita_Media': 'Probabilidade Média'}
-    )
-    fig_cal.update_layout(yaxis_tickformat='.0%')
-    st.plotly_chart(fig_cal, use_container_width=True)
-
-# Insights em linguagem natural
-st.header("💡 Insights em linguagem simples")
-
-# 1) Em que grupos os casos tendem a ser concluídos?
-top_clusters = cluster_metrics.sort_values('Taxa_Conclusao_Real', ascending=False).head(3)
-def to_ratio(p):
-    # Converte percentual (0-1) em expressão tipo "7 em cada 10"
-    if pd.isna(p):
-        return "—"
-    denom = 10
-    num = int(round(p * denom))
-    num = max(0, min(num, denom))
-    return f"{num} em cada {denom}"
-
-txt_top = ", ".join([
-    f"Cluster {int(r['cluster'])} ({to_ratio(r['Taxa_Conclusao_Real'])} casos concluídos)"
-    for _, r in top_clusters.iterrows()
-]) if len(top_clusters) else "—"
-st.markdown(f"- **Onde mais conclui:** {txt_top}")
-
-# 2) Onde o modelo mais acerta?
-top_acc = cluster_metrics.sort_values('Acuracia_Predito', ascending=False).head(3)
-txt_acc = ", ".join([
-    f"Cluster {int(r['cluster'])} ({to_ratio(r['Acuracia_Predito'])} acertos)"
-    for _, r in top_acc.iterrows()
-]) if len(top_acc) else "—"
-st.markdown(f"- **Onde o modelo mais acerta:** {txt_acc}")
-
-# 3) Como interpretar uma probabilidade?
-st.markdown("- **Como ler a probabilidade:** acima de 70% ≈ 7 em 10 chances; abaixo de 30% ≈ 3 em 10; no meio, incerteza.")
-
-# 4) Explicação curta de uso
-st.markdown("- **Como usar:** selecione as características do caso e veja a probabilidade e o grupo parecido. Compare com as métricas por cluster acima para entender o contexto.")
-
-# Mapa de Hotspots
+# Mapa de Hotspots (por último)
 st.markdown("---")
 st.header("🗺️ Mapa de Hotspots")
+
+st.markdown("""
+**O mapa mostra onde os crimes acontecem com mais frequência na cidade.**
+
+**🔍 O que é um hotspot?**
+- **Hotspot** = área com alta concentração de crimes
+- **Círculos vermelhos** = áreas com muitos crimes
+- **Círculos menores** = áreas com poucos crimes
+- **Cores mais escuras** = maior concentração de crimes
+
+**📊 Como usar o mapa:**
+- **Clique nos círculos** para ver detalhes de cada área
+- **Use o zoom** para explorar bairros específicos
+- **Compare as áreas** para identificar padrões geográficos
+- **Identifique zonas críticas** que precisam de mais atenção policial
+
+**🎯 Por que isso é importante?**
+- Ajuda a **planejar patrulhamento** policial
+- Identifica **áreas de risco** para a população
+- Permite **alocação de recursos** de forma mais eficiente
+- Facilita a **análise de padrões** geográficos dos crimes
+""")
 
 # Função para criar mapa de hotspots
 def create_hotspot_map(df):
@@ -616,133 +695,142 @@ def create_hotspot_map(df):
             lon_offset = np.random.uniform(-0.03, 0.03)
             bairro_coords[bairro] = [center_lat + lat_offset, center_lon + lon_offset]
     
-    # Adicionar marcadores para cada bairro
-    for bairro in df['bairro'].unique():
-        bairro_data = df[df['bairro'] == bairro]
-        total_crimes = len(bairro_data)
-        concluded_crimes = len(bairro_data[bairro_data['status_investigacao'] == 'Concluído'])
-        completion_rate = (concluded_crimes / total_crimes) * 100 if total_crimes > 0 else 0
-        
-        # Cor baseada na taxa de conclusão
-        if completion_rate > 60:
-            color = 'green'
-        elif completion_rate > 40:
-            color = 'orange'
-        else:
-            color = 'red'
-        
-        # Adicionar marcador
-        folium.CircleMarker(
-            location=bairro_coords[bairro],
-            radius=min(max(total_crimes / 10, 5), 20),  # Tamanho baseado no número de crimes
-            popup=f"""
-            <b>{bairro}</b><br>
-            Total de Crimes: {total_crimes}<br>
-            Taxa de Conclusão: {completion_rate:.1f}%<br>
-            Crimes Concluídos: {concluded_crimes}
-            """,
-            color='black',
-            weight=1,
-            fillColor=color,
-            fillOpacity=0.7
-        ).add_to(m)
+    # Contar crimes por bairro
+    crime_counts = df['bairro'].value_counts()
+    
+    # Normalizar contagens para tamanho dos círculos (0.1 a 0.8)
+    max_count = crime_counts.max()
+    min_count = crime_counts.min()
+    
+    if max_count > min_count:
+        normalized_sizes = 0.1 + 0.7 * (crime_counts - min_count) / (max_count - min_count)
+    else:
+        normalized_sizes = [0.4] * len(crime_counts)
+    
+    # Adicionar círculos para cada bairro
+    for bairro, count in crime_counts.items():
+        if bairro in bairro_coords:
+            lat, lon = bairro_coords[bairro]
+            size = normalized_sizes[bairro]
+            
+            # Cor baseada na quantidade de crimes
+            if count >= max_count * 0.8:
+                color = 'red'
+            elif count >= max_count * 0.6:
+                color = 'orange'
+            elif count >= max_count * 0.4:
+                color = 'yellow'
+            else:
+                color = 'green'
+            
+            # Adicionar círculo
+            folium.CircleMarker(
+                location=[lat, lon],
+                radius=size * 50,  # Escalar para tamanho visível
+                popup=f"<b>{bairro}</b><br>Crimes: {count}",
+                color='black',
+                weight=1,
+                fillColor=color,
+                fillOpacity=0.6
+            ).add_to(m)
     
     return m
 
 # Criar e exibir mapa
-if 'bairro' in df.columns:
-    hotspot_map = create_hotspot_map(df_filtered)
-    
-    # Salvar mapa temporariamente e exibir
-    map_html = hotspot_map._repr_html_()
-    components.html(map_html, height=500)
-    
-    # Estatísticas do mapa
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("Total de Bairros", df_filtered['bairro'].nunique())
-    
-    with col2:
-        high_completion = df_filtered.groupby('bairro').apply(
-            lambda x: (x['status_investigacao'] == 'Concluído').mean() > 0.6
-        ).sum()
-        st.metric("Bairros com Alta Taxa de Conclusão", high_completion)
-    
-    with col3:
-        total_crimes = len(df_filtered)
-        st.metric("Total de Crimes no Mapa", total_crimes)
+if 'bairro' in df_filtered.columns:
+    with st.spinner("🗺️ Criando mapa de hotspots..."):
+        hotspot_map = create_hotspot_map(df_filtered)
+        st.components.v1.html(hotspot_map._repr_html_(), height=600)
+        
+        # Estatísticas do mapa
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            total_bairros = df_filtered['bairro'].nunique()
+            st.metric("Bairros no Mapa", total_bairros)
+        with col2:
+            bairro_mais_crimes = df_filtered['bairro'].value_counts().index[0]
+            crimes_mais_bairro = df_filtered['bairro'].value_counts().iloc[0]
+            st.metric("Bairro com Mais Crimes", f"{bairro_mais_crimes} ({crimes_mais_bairro} crimes)")
+        with col3:
+            total_crimes = len(df_filtered)
+            st.metric("Total de Crimes no Mapa", total_crimes)
 else:
     st.warning("⚠️ Coluna 'bairro' não encontrada no dataset. Mapa de hotspots não pode ser gerado.")
 
-# Tela de Anomalias
-st.markdown("---")
-st.header("🚨 Detecção de Anomalias")
+# Sidebar para informações
+st.sidebar.header("📊 Informações do Sistema")
 
-# Estatísticas de anomalias
-anomaly_stats = df_with_anomalies['is_anomaly'].value_counts()
-total_anomalies = anomaly_stats.get(1, 0)
-total_normal = anomaly_stats.get(0, 0)
+st.sidebar.metric("Total de Crimes Analisados", len(df_filtered))
+st.sidebar.metric("Crimes Resolvidos", len(df_filtered[df_filtered['status_binario'] == 1]))
+st.sidebar.metric("Crimes Arquivados", len(df_filtered[df_filtered['status_binario'] == 0]))
+
+# Guia explicativo
+with st.sidebar.expander("📚 Como Entender os Resultados", expanded=True):
+    st.markdown("""
+    **🎯 Probabilidades:**
+    - **Alta (>70%)**: Muito provável que aconteça
+    - **Média (30-70%)**: Incerto, pode acontecer ou não
+    - **Baixa (<30%)**: Pouco provável que aconteça
+    
+    **👥 Grupos de Crimes:**
+    - Crimes similares são agrupados juntos
+    - Cada grupo tem características parecidas
+    - Ajuda a entender padrões
+    
+    **🚨 Casos Atípicos:**
+    - Crimes muito diferentes do normal
+    - Merecem atenção especial
+    - Podem indicar novos tipos de crime
+    
+    **🔧 Ajuste Automático:**
+    - Melhora a precisão do sistema
+    - Testa diferentes configurações
+    - Pode demorar alguns minutos
+    """)
+
+# Análise exploratória
+st.header("📈 Visão Geral dos Dados")
+
+st.markdown("**Aqui você pode ver como os crimes estão distribuídos no sistema:**")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    # Distribuição do status
+    status_counts = df_filtered['status_investigacao'].value_counts()
+    st.write("**📊 Como terminam os crimes no sistema:**")
+    for status, count in status_counts.items():
+        percentage = (count / len(df_filtered)) * 100
+        st.write(f"• {status}: {count} casos ({percentage:.1f}% do total)")
+
+with col2:
+    # Status por tipo de crime
+    status_crime = pd.crosstab(df_filtered['tipo_crime'], df_filtered['status_investigacao'])
+    st.write("**📈 Como cada tipo de crime costuma terminar:**")
+    st.dataframe(status_crime, width='stretch')
+
+# Métricas do modelo
+st.header("📊 Qualidade do Sistema")
+
+accuracy = accuracy_score(y_test, y_pred)
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.metric("Total de Anomalias", total_anomalies)
+    st.metric("Precisão do Sistema", f"{accuracy:.1%}")
+    st.caption("Quantos casos o sistema acerta")
 with col2:
-    st.metric("Casos Normais", total_normal)
+    # Calcular precisão média
+    precision = precision_score(y_test, y_pred, average='weighted')
+    st.metric("Confiabilidade", f"{precision:.1%}")
+    st.caption("Quão confiável é o sistema")
 with col3:
-    anomaly_rate = (total_anomalies / len(df_with_anomalies)) * 100
-    st.metric("Taxa de Anomalias", f"{anomaly_rate:.1f}%")
+    st.metric("Casos Testados", len(y_test))
+    st.caption("Quantos casos foram usados para testar")
 
-# Filtros para anomalias
-st.subheader("🔍 Filtros de Anomalias")
+# Configurações do sistema (simplificado)
+st.subheader("⚙️ Configurações do Sistema")
+st.info("O sistema usa Random Forest com configurações otimizadas para análise de crimes.")
 
-col1, col2 = st.columns(2)
-with col1:
-    show_iso_anomalies = st.checkbox("Mostrar apenas anomalias do Isolation Forest", value=True)
-with col2:
-    show_lof_anomalies = st.checkbox("Mostrar apenas anomalias do LOF", value=True)
 
-# Filtrar anomalias
-anomaly_filter = df_with_anomalies['is_anomaly'] == 1
-if show_iso_anomalies and not show_lof_anomalies:
-    anomaly_filter = df_with_anomalies['iso_anomaly'] == -1
-elif show_lof_anomalies and not show_iso_anomalies:
-    anomaly_filter = df_with_anomalies['lof_anomaly'] == -1
 
-anomalies_df = df_with_anomalies[anomaly_filter]
 
-if len(anomalies_df) > 0:
-    st.subheader(f"📋 Lista de Anomalias ({len(anomalies_df)} casos)")
-    
-    # Selecionar colunas para exibir
-    display_columns = ['tipo_crime', 'descricao_modus_operandi', 'arma_utilizada', 
-                      'quantidade_vitimas', 'quantidade_suspeitos', 'status_investigacao']
-    
-    # Filtrar apenas colunas que existem
-    available_columns = [col for col in display_columns if col in anomalies_df.columns]
-    
-    if available_columns:
-        st.dataframe(anomalies_df[available_columns], use_container_width=True)
-        
-        # Análise das anomalias
-        st.subheader("📊 Análise das Anomalias")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Distribuição por tipo de crime
-            crime_dist = anomalies_df['tipo_crime'].value_counts()
-            fig_crime = px.bar(x=crime_dist.index, y=crime_dist.values, 
-                              title="Anomalias por Tipo de Crime")
-            st.plotly_chart(fig_crime, use_container_width=True)
-        
-        with col2:
-            # Distribuição por status
-            status_dist = anomalies_df['status_investigacao'].value_counts()
-            fig_status = px.pie(values=status_dist.values, names=status_dist.index,
-                               title="Status das Anomalias")
-            st.plotly_chart(fig_status, use_container_width=True)
-    else:
-        st.warning("⚠️ Colunas necessárias não encontradas no dataset.")
-else:
-    st.info("ℹ️ Nenhuma anomalia encontrada com os filtros selecionados.")
